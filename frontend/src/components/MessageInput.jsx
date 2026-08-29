@@ -2,25 +2,29 @@ import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { readFileAsDataUrl, validateImageFile } from "../lib/images.js";
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const { sendMessage, isSendingMessage } = useChatStore();
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
+    if (!file) return;
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      e.target.value = "";
       return;
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setImagePreview(await readFileAsDataUrl(file));
+    } catch (error) {
+      toast.error(error.message);
+      e.target.value = "";
+    }
   };
 
   const removeImage = () => {
@@ -33,17 +37,17 @@ const MessageInput = () => {
     if (!text.trim() && !imagePreview) return;
 
     try {
-      await sendMessage({
+      const sent = await sendMessage({
         text: text.trim(),
         image: imagePreview,
       });
 
-      // Clear form
+      if (!sent) return;
       setText("");
       setImagePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (error) {
-      console.error("Failed to send message:", error);
+    } catch {
+      // The store displays the error; preserve the draft for retry.
     }
   };
 
@@ -77,6 +81,8 @@ const MessageInput = () => {
             placeholder="Type a message..."
             value={text}
             onChange={(e) => setText(e.target.value)}
+            maxLength={2000}
+            aria-label="Message"
           />
           <input
             type="file"
@@ -91,6 +97,8 @@ const MessageInput = () => {
             className={`hidden sm:flex btn btn-circle
                      ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
             onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach image"
+            disabled={isSendingMessage}
           >
             <Image size={20} />
           </button>
@@ -98,7 +106,8 @@ const MessageInput = () => {
         <button
           type="submit"
           className="btn btn-sm btn-circle"
-          disabled={!text.trim() && !imagePreview}
+          disabled={isSendingMessage || (!text.trim() && !imagePreview)}
+          aria-label="Send message"
         >
           <Send size={22} />
         </button>

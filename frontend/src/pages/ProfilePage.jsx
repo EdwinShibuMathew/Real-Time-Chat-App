@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { Camera, Mail, User } from "lucide-react";
+import toast from "react-hot-toast";
+import { readFileAsDataUrl, validateImageFile } from "../lib/images.js";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
@@ -9,20 +11,25 @@ const ProfilePage = () => {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      e.target.value = "";
+      return;
+    }
 
-    const reader = new FileReader();
-
-    reader.readAsDataURL(file);
-
-    reader.onload = async () => {
-      const base64Image = reader.result;
+    try {
+      const base64Image = await readFileAsDataUrl(file);
       setSelectedImg(base64Image);
       await updateProfile({ profilePic: base64Image });
-    };
+      setSelectedImg(null);
+    } catch {
+      setSelectedImg(null);
+    }
   };
 
   return (
-    <div className="h-screen pt-20">
+    <div className="min-h-dvh pt-20">
       <div className="max-w-2xl mx-auto p-4 py-8">
         <div className="bg-base-300 rounded-xl p-6 space-y-8">
           <div className="text-center">
@@ -57,6 +64,7 @@ const ProfilePage = () => {
                   accept="image/*"
                   onChange={handleImageUpload}
                   disabled={isUpdatingProfile}
+                  aria-label="Upload profile image"
                 />
               </label>
             </div>

@@ -14,6 +14,8 @@ const messageSchema = new mongoose.Schema(
     },
     text: {
       type: String,
+      trim: true,
+      maxlength: 2000,
     },
     image: {
       type: String,
@@ -21,6 +23,16 @@ const messageSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+messageSchema.pre("validate", function validateContent(next) {
+  if (!this.text?.trim() && !this.image) {
+    return next(new Error("A message must include text or an image"));
+  }
+  next();
+});
+
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
+messageSchema.index({ receiverId: 1, senderId: 1, createdAt: 1 });
 
 const Message = mongoose.model("Message", messageSchema);
 

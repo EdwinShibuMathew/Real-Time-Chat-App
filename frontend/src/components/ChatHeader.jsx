@@ -27,7 +27,7 @@ const ChatHeader = () => {
         </div>
 
         {/* Close button */}
-        <button onClick={() => setSelectedUser(null)}>
+        <button onClick={() => setSelectedUser(null)} aria-label="Close conversation">
           <X />
         </button>
       </div>

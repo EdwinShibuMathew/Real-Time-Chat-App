@@ -38,7 +38,9 @@ const Sidebar = () => {
             />
             <span className="text-sm">Show online only</span>
           </label>
-          <span className="text-xs text-zinc-500">({onlineUsers.length - 1} online)</span>
+          <span className="text-xs text-zinc-500">
+            ({users.filter((user) => onlineUsers.includes(user._id)).length} online)
+          </span>
         </div>
       </div>
 
@@ -56,7 +58,7 @@ const Sidebar = () => {
             <div className="relative mx-auto lg:mx-0">
               <img
                 src={user.profilePic || "/avatar.png"}
-                alt={user.name}
+                alt={user.fullName}
                 className="size-12 object-cover rounded-full"
               />
               {onlineUsers.includes(user._id) && (
@@ -78,7 +80,9 @@ const Sidebar = () => {
         ))}
 
         {filteredUsers.length === 0 && (
-          <div className="text-center text-zinc-500 py-4">No online users</div>
+          <div className="text-center text-zinc-500 py-4">
+            {showOnlineOnly ? "No online users" : "No contacts available"}
+          </div>
         )}
       </div>
     </aside>

@@ -1,13 +1,29 @@
 {
   "name": "chat-app",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Production-ready real-time chat application",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
   "scripts": {
-    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "npm run start --prefix backend"
+    "dev": "concurrently -k -s first -n backend,frontend -c blue,magenta \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "build": "npm run build --workspace frontend",
+    "start": "npm run start --workspace backend",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "concurrently": "^9.2.1"
+  }
 }

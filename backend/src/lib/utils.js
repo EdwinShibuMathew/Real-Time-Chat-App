@@ -5,12 +5,21 @@ export const generateToken = (userId, res) => {
     expiresIn: "7d",
   });
 
-  res.cookie("jwt", token, {
+  res.cookie("jwt", token, getCookieOptions());
+
+  return token;
+};
+
+export const getCookieOptions = () => ({
     maxAge: 7 * 24 * 60 * 60 * 1000, // MS
     httpOnly: true, // prevent XSS attacks cross-site scripting attacks
     sameSite: "strict", // CSRF attacks cross-site request forgery attacks
-    secure: process.env.NODE_ENV !== "development",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
   });
 
-  return token;
+export const getClearCookieOptions = () => {
+  const options = getCookieOptions();
+  delete options.maxAge;
+  return options;
 };

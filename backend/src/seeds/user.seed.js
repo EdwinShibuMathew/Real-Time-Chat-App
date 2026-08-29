@@ -1,6 +1,8 @@
 import { config } from "dotenv";
 import { connectDB } from "../lib/db.js";
 import User from "../models/user.model.js";
+import bcrypt from "bcryptjs";
+import { disconnectDB } from "../lib/db.js";
 
 config();
 
@@ -102,12 +104,28 @@ const seedUsers = [
 
 const seedDatabase = async () => {
   try {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Seeding is disabled in production");
+    }
     await connectDB();
-
-    await User.insertMany(seedUsers);
+    for (const seedUser of seedUsers) {
+      await User.updateOne(
+        { email: seedUser.email },
+        {
+          $setOnInsert: {
+            ...seedUser,
+            password: await bcrypt.hash(seedUser.password, 12),
+          },
+        },
+        { upsert: true }
+      );
+    }
     console.log("Database seeded successfully");
   } catch (error) {
     console.error("Error seeding database:", error);
+    process.exitCode = 1;
+  } finally {
+    await disconnectDB();
   }
 };
 

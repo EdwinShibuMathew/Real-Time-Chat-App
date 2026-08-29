@@ -1,37 +1,88 @@
 import { Server } from "socket.io";
-import http from "http";
-import express from "express";
+import jwt from "jsonwebtoken";
+import User from "../models/user.model.js";
+import { logger } from "./logger.js";
 
-const app = express();
-const server = http.createServer(app);
+let io;
+const connectionCounts = new Map();
 
-const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:5173"],
-  },
-});
-
-export function getReceiverSocketId(userId) {
-  return userSocketMap[userId];
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((item) => item.trim())
+      .filter((item) => item.includes("="))
+      .map((item) => {
+        const index = item.indexOf("=");
+        return [item.slice(0, index), decodeURIComponent(item.slice(index + 1))];
+      })
+  );
 }
 
-// used to store online users
-const userSocketMap = {}; // {userId: socketId}
+const userRoom = (userId) => `user:${userId}`;
 
-io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
+function emitOnlineUsers() {
+  io.emit("getOnlineUsers", [...connectionCounts.keys()]);
+}
 
-  const userId = socket.handshake.query.userId;
-  if (userId) userSocketMap[userId] = socket.id;
-
-  // io.emit() is used to send events to all the connected clients
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
-
-  socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
-    delete userSocketMap[userId];
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+export function initializeSocket(server) {
+  io = new Server(server, {
+    cors:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : { origin: process.env.CLIENT_ORIGIN, credentials: true },
+    maxHttpBufferSize: 1024 * 1024,
   });
-});
 
-export { io, app, server };
+  io.use(async (socket, next) => {
+    try {
+      const token = parseCookies(socket.request.headers.cookie).jwt;
+      if (!token) return next(new Error("Unauthorized"));
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.userId).select("_id").lean();
+      if (!user) return next(new Error("Unauthorized"));
+
+      socket.data.userId = String(user._id);
+      return next();
+    } catch {
+      return next(new Error("Unauthorized"));
+    }
+  });
+
+  io.on("connection", (socket) => {
+    const userId = socket.data.userId;
+    socket.join(userRoom(userId));
+    connectionCounts.set(userId, (connectionCounts.get(userId) || 0) + 1);
+    emitOnlineUsers();
+    logger.info({ socketId: socket.id, userId }, "Socket connected");
+
+    socket.on("disconnect", () => {
+      const remaining = (connectionCounts.get(userId) || 1) - 1;
+      if (remaining > 0) connectionCounts.set(userId, remaining);
+      else connectionCounts.delete(userId);
+      emitOnlineUsers();
+      logger.info({ socketId: socket.id, userId }, "Socket disconnected");
+    });
+  });
+
+  return io;
+}
+
+export function emitNewMessage(message) {
+  if (!io) return;
+  io.to(userRoom(String(message.receiverId)))
+    .to(userRoom(String(message.senderId)))
+    .emit("newMessage", message);
+}
+
+export function closeSocket() {
+  return new Promise((resolve) => {
+    if (!io) return resolve();
+    io.close(() => {
+      io = undefined;
+      connectionCounts.clear();
+      resolve();
+    });
+  });
+}

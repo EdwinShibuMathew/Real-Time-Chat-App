@@ -1,42 +1,60 @@
-import express from "express";
-import dotenv from "dotenv";
-import cookieParser from "cookie-parser";
-import cors from "cors";
+import http from "node:http";
+import { validateEnv } from "./config/env.js";
 
-import path from "path";
+async function start() {
+  const env = validateEnv();
+  const [{ createApp }, { connectDB, disconnectDB }, { initializeSocket, closeSocket }, { logger }] =
+    await Promise.all([
+      import("./app.js"),
+      import("./lib/db.js"),
+      import("./lib/socket.js"),
+      import("./lib/logger.js"),
+    ]);
 
-import { connectDB } from "./lib/db.js";
+  const connection = await connectDB();
+  logger.info({ host: connection.connection.host }, "MongoDB connected");
 
-import authRoutes from "./routes/auth.route.js";
-import messageRoutes from "./routes/message.route.js";
-import { app, server } from "./lib/socket.js";
-
-dotenv.config();
-
-const PORT = process.env.PORT;
-const __dirname = path.resolve();
-
-app.use(express.json());
-app.use(cookieParser());
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  })
-);
-
-app.use("/api/auth", authRoutes);
-app.use("/api/messages", messageRoutes);
-
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+  const server = http.createServer(createApp());
+  initializeSocket(server);
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(env.PORT, () => {
+      server.off("error", reject);
+      resolve();
+    });
   });
+  logger.info({ port: env.PORT }, "Server listening");
+
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, "Shutting down");
+    const forceExit = setTimeout(() => process.exit(1), 10_000);
+    forceExit.unref();
+
+    try {
+      await closeSocket();
+      if (server.listening) {
+        await new Promise((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        });
+      }
+      await disconnectDB();
+      clearTimeout(forceExit);
+      process.exit(0);
+    } catch (error) {
+      logger.error({ err: error }, "Graceful shutdown failed");
+      process.exit(1);
+    }
+
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-server.listen(PORT, () => {
-  console.log("server is running on PORT:" + PORT);
-  connectDB();
+start().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
 });
