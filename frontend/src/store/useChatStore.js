@@ -8,6 +8,12 @@ function appendUnique(messages, message) {
   return messages.some((item) => item._id === message._id) ? messages : [...messages, message];
 }
 
+function upsertContact(users, contact) {
+  const nextUsers = users.filter((user) => user._id !== contact._id);
+  nextUsers.push(contact);
+  return nextUsers.sort((first, second) => first.fullName.localeCompare(second.fullName));
+}
+
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
@@ -17,6 +23,7 @@ export const useChatStore = create((set, get) => ({
   isSendingMessage: false,
   messagesRequestId: 0,
   messageHandler: null,
+  contactHandler: null,
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -83,6 +90,27 @@ export const useChatStore = create((set, get) => ({
     set({ messageHandler: handler });
   },
 
+  subscribeToContacts: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    get().unsubscribeFromContacts();
+    const handler = (contact) => {
+      if (contact._id !== useAuthStore.getState().authUser?._id) {
+        set((state) => ({ users: upsertContact(state.users, contact) }));
+      }
+    };
+    socket.on("newUser", handler);
+    set({ contactHandler: handler });
+  },
+
+  unsubscribeFromContacts: () => {
+    const socket = useAuthStore.getState().socket;
+    const handler = get().contactHandler;
+    if (socket && handler) socket.off("newUser", handler);
+    set({ contactHandler: null });
+  },
+
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     const handler = get().messageHandler;
@@ -99,6 +127,7 @@ export const useChatStore = create((set, get) => ({
 
   reset: () => {
     get().unsubscribeFromMessages();
+    get().unsubscribeFromContacts();
     set({
       messages: [],
       users: [],

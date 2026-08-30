@@ -168,4 +168,57 @@ describe("Socket.IO authentication", () => {
     await closeSocket();
     if (server.listening) await new Promise((resolve) => server.close(resolve));
   });
+
+  it("pushes new contacts and presence changes to already connected users", async () => {
+    const server = http.createServer(app);
+    initializeSocket(server);
+    await new Promise((resolve) => server.listen(0, resolve));
+    const url = `http://127.0.0.1:${server.address().port}`;
+
+    const firstSignup = await request(app)
+      .post("/api/auth/signup")
+      .send({ fullName: "First User", email: "first@example.com", password: "password123" });
+    const firstCookie = firstSignup.headers["set-cookie"][0].split(";")[0];
+    const firstClient = createClient(url, {
+      transports: ["websocket"],
+      extraHeaders: { Cookie: firstCookie },
+      reconnection: false,
+    });
+    await new Promise((resolve, reject) => {
+      firstClient.on("connect", resolve);
+      firstClient.on("connect_error", reject);
+    });
+
+    const newContact = new Promise((resolve) => firstClient.once("newUser", resolve));
+    const secondSignup = await request(app)
+      .post("/api/auth/signup")
+      .send({ fullName: "Second User", email: "second@example.com", password: "password123" });
+    await expect(newContact).resolves.toEqual({
+      _id: secondSignup.body._id,
+      fullName: "Second User",
+      profilePic: "",
+    });
+
+    const onlineUpdate = new Promise((resolve) => firstClient.once("getOnlineUsers", resolve));
+    const secondCookie = secondSignup.headers["set-cookie"][0].split(";")[0];
+    const secondClient = createClient(url, {
+      transports: ["websocket"],
+      extraHeaders: { Cookie: secondCookie },
+      reconnection: false,
+    });
+    await expect(onlineUpdate).resolves.toEqual(
+      expect.arrayContaining([firstSignup.body._id, secondSignup.body._id])
+    );
+
+    const resync = new Promise((resolve) => firstClient.once("getOnlineUsers", resolve));
+    firstClient.emit("requestOnlineUsers");
+    await expect(resync).resolves.toEqual(
+      expect.arrayContaining([firstSignup.body._id, secondSignup.body._id])
+    );
+
+    firstClient.close();
+    secondClient.close();
+    await closeSocket();
+    if (server.listening) await new Promise((resolve) => server.close(resolve));
+  });
 });

@@ -97,6 +97,7 @@ export const useAuthStore = create((set, get) => ({
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
+    socket.on("connect", () => socket.emit("requestOnlineUsers"));
     socket.on("connect_error", (error) => {
       if (error.message === "Unauthorized") get().disconnectSocket();
     });

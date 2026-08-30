@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
 import { generateToken, getClearCookieOptions } from "../lib/utils.js";
 import { serializeUser } from "../lib/serializers.js";
+import { emitNewUser } from "../lib/socket.js";
 import {
   loginSchema,
   parseBody,
@@ -27,7 +28,13 @@ export const signup = async (req, res, next) => {
       password: await bcrypt.hash(password, 12),
     });
     generateToken(user._id, res);
-    return res.status(201).json(serializeUser(user));
+    const serializedUser = serializeUser(user);
+    emitNewUser({
+      _id: serializedUser._id,
+      fullName: serializedUser.fullName,
+      profilePic: serializedUser.profilePic,
+    });
+    return res.status(201).json(serializedUser);
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({ message: "Email already exists" });

@@ -25,6 +25,10 @@ function emitOnlineUsers() {
   io.emit("getOnlineUsers", [...connectionCounts.keys()]);
 }
 
+function sendOnlineUsers(socket) {
+  socket.emit("getOnlineUsers", [...connectionCounts.keys()]);
+}
+
 export function initializeSocket(server) {
   io = new Server(server, {
     cors:
@@ -52,16 +56,24 @@ export function initializeSocket(server) {
 
   io.on("connection", (socket) => {
     const userId = socket.data.userId;
+    const previousConnections = connectionCounts.get(userId) || 0;
     socket.join(userRoom(userId));
-    connectionCounts.set(userId, (connectionCounts.get(userId) || 0) + 1);
-    emitOnlineUsers();
+    connectionCounts.set(userId, previousConnections + 1);
+    sendOnlineUsers(socket);
+    if (previousConnections === 0) {
+      socket.broadcast.emit("getOnlineUsers", [...connectionCounts.keys()]);
+    }
     logger.info({ socketId: socket.id, userId }, "Socket connected");
+
+    socket.on("requestOnlineUsers", () => sendOnlineUsers(socket));
 
     socket.on("disconnect", () => {
       const remaining = (connectionCounts.get(userId) || 1) - 1;
       if (remaining > 0) connectionCounts.set(userId, remaining);
-      else connectionCounts.delete(userId);
-      emitOnlineUsers();
+      else {
+        connectionCounts.delete(userId);
+        emitOnlineUsers();
+      }
       logger.info({ socketId: socket.id, userId }, "Socket disconnected");
     });
   });
@@ -74,6 +86,11 @@ export function emitNewMessage(message) {
   io.to(userRoom(String(message.receiverId)))
     .to(userRoom(String(message.senderId)))
     .emit("newMessage", message);
+}
+
+export function emitNewUser(user) {
+  if (!io) return;
+  io.emit("newUser", user);
 }
 
 export function closeSocket() {

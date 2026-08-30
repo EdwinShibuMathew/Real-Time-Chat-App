@@ -17,7 +17,9 @@ test("two authenticated users exchange a real-time message", async ({ browser })
 
   await signUp(receiver, "Receiver User", "receiver-e2e@example.com");
   await signUp(sender, "Sender User", "sender-e2e@example.com");
-  await receiver.reload();
+
+  await expect(receiver.getByRole("button", { name: /Sender User/ })).toBeVisible();
+  await expect(receiver.getByText("Online", { exact: true })).toBeVisible();
 
   await receiver.getByRole("button", { name: /Sender User/ }).click();
   await sender.getByRole("button", { name: /Receiver User/ }).click();
