@@ -1,9 +1,23 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { LogOut, MessageSquare, Settings, User } from "lucide-react";
+import { useRef, useState } from "react";
+import LogoutConfirmationDialog from "./LogoutConfirmationDialog";
 
 const Navbar = () => {
   const { logout, authUser } = useAuthStore();
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const logoutButtonRef = useRef(null);
+
+  const closeLogoutDialog = () => {
+    setIsLogoutDialogOpen(false);
+    requestAnimationFrame(() => logoutButtonRef.current?.focus());
+  };
+
+  const confirmLogout = () => {
+    setIsLogoutDialogOpen(false);
+    logout();
+  };
 
   return (
     <header
@@ -40,10 +54,21 @@ const Navbar = () => {
                   <span className="hidden sm:inline">Profile</span>
                 </Link>
 
-                <button className="btn btn-sm gap-2" onClick={logout} aria-label="Log out">
+                <button
+                  ref={logoutButtonRef}
+                  className="btn btn-sm gap-2"
+                  onClick={() => setIsLogoutDialogOpen(true)}
+                  aria-label="Log out"
+                >
                   <LogOut className="size-5" />
                   <span className="hidden sm:inline">Logout</span>
                 </button>
+
+                <LogoutConfirmationDialog
+                  isOpen={isLogoutDialogOpen}
+                  onCancel={closeLogoutDialog}
+                  onConfirm={confirmLogout}
+                />
               </>
             )}
           </div>
