@@ -29,6 +29,8 @@ test("two authenticated users exchange a real-time message", async ({ browser })
   await expect(receiver.getByText("Hello in real time")).toBeVisible();
   await expect(receiver.getByText("Online", { exact: true }).last()).toBeVisible();
 
-  await receiverContext.close();
   await senderContext.close();
+  await expect(receiver.getByText("Offline", { exact: true }).last()).toBeVisible({ timeout: 2_000 });
+
+  await receiverContext.close();
 });
